@@ -58,7 +58,7 @@ export function NewJob({ me, onCreated }: { me: Me; onCreated: (id: string) => v
           <span className="field__label">Channel</span>
           {channels === null && !loadError && <span className="skel skel--input" aria-label="Loading channels" />}
           {loadError && <span className="field__error">Couldn’t load channels: {loadError} <button type="button" className="link-btn" onClick={loadChannels}>Retry</button></span>}
-          {channels && channels.length === 0 && <span className="field__hint">No channels yet. Add one in the CM app first.</span>}
+          {channels && channels.length === 0 && <span className="field__hint">No channels yet. Add one in the Factory dashboard first.</span>}
           {channels && channels.length > 0 && (
             <select className="input" value={channel} onChange={(e) => setChannel(e.target.value)}>
               <option value="">Choose a channel</option>

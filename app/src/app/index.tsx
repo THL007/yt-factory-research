@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, getSettings, isAdmin, Me, signOut } from "../lib/api";
+import { api, getSettings, Me, signOut } from "../lib/api";
 import { SignIn } from "../components/SignIn";
 import { Queue } from "../components/Queue";
 import { NewJob } from "../components/NewJob";
 import { BriefView } from "../components/BriefView";
-import { Tokens } from "../components/Tokens";
+import { Settings } from "../components/Settings";
 
-type View = "queue" | "new" | "job" | "tokens";
+type View = "queue" | "new" | "job" | "settings";
 
 function readUrl(): { view: View; job: string | null } {
   if (typeof window === "undefined") return { view: "queue", job: null };
   const q = new URLSearchParams(window.location.search);
   const v = q.get("view");
   const job = q.get("job");
-  return { view: v === "new" || v === "tokens" || (v === "job" && job) ? (v as View) : "queue", job };
+  return { view: v === "new" || v === "settings" || (v === "job" && job) ? (v as View) : "queue", job };
 }
 
 export default function Home() {
@@ -55,7 +55,7 @@ export default function Home() {
   const tabs: { id: View; label: string }[] = [
     { id: "queue", label: "Queue" },
     { id: "new", label: "New job" },
-    ...(me && isAdmin(me.role) ? [{ id: "tokens" as View, label: "Tokens" }] : []),
+    { id: "settings", label: "Settings" },
   ];
 
   return (
@@ -93,7 +93,7 @@ export default function Home() {
             {view === "queue" && <Queue me={me} onOpen={(id) => go("job", id)} onNew={() => go("new")} />}
             {view === "new" && <NewJob me={me} onCreated={(id) => go("job", id)} />}
             {view === "job" && job && <BriefView key={job} id={job} me={me} onBack={() => go("queue")} />}
-            {view === "tokens" && isAdmin(me.role) && <Tokens me={me} />}
+            {view === "settings" && <Settings me={me} onSignedIn={load} />}
           </>
         )}
       </main>

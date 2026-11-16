@@ -5,6 +5,7 @@
 
 const ADMIN_ROLES = new Set(['owner', 'admin']);
 const RESEARCH_ROLES = new Set(['owner', 'admin', 'research']);
+const CH_STATUS = new Set(['draft', 'active', 'paused', 'archived']);
 const READ_ROLES = new Set(['owner', 'admin', 'research', 'content', 'production', 'publish']);
 
 class HttpError extends Error {
@@ -428,6 +429,122 @@ async function route(req, env, ctx) {
     await q(env, 'UPDATE access_tokens SET revoked_at = now() WHERE id=$1 AND revoked_at IS NULL', [k[1]]);
     await audit(env, me.user_id, 'token.revoke', 'access_token', k[1], {});
     return json({ ok: true });
+  }
+
+  // --- admin: channels (dashboard)
+  if (p === '/admin/channels' && m === 'GET') {
+    need(me, ADMIN_ROLES);
+    const rows = await q(env, `
+      SELECT c.id, c.name, c.niche, c.language, c.cadence, c.voice_tone, c.status, c.created_at, c.updated_at,
+             (SELECT count(*) FROM video_tickets v WHERE v.channel_id = c.id AND v.deleted_at IS NULL)::int AS videos,
+             (SELECT count(*) FROM research_jobs j WHERE j.channel_id = c.id AND j.status IN ('queued','running','review'))::int AS open_research,
+             coalesce((SELECT json_agg(json_build_object('id', u.id, 'display_name', u.display_name) ORDER BY u.display_name)
+                         FROM channel_members cm JOIN users u ON u.id = cm.user_id WHERE cm.channel_id = c.id AND u.deleted_at IS NULL), '[]'::json) AS members
+        FROM channels c WHERE c.deleted_at IS NULL ORDER BY c.status = 'archived', c.name`);
+    return json(rows);
+  }
+  if (p === '/admin/channels' && m === 'POST') {
+    need(me, ADMIN_ROLES);
+    const b = await body(req);
+    const name = str(b.name, 120)?.trim();
+    if (!name) throw new HttpError(400, 'name required');
+    const status = CH_STATUS.has(b.status) ? b.status : 'draft';
+    const id = newId('ch');
+    await q(env, `INSERT INTO channels (id, name, niche, language, cadence, voice_tone, status, created_at, updated_at)
+                  VALUES ($1,$2,$3,$4,$5,$6,$7,now(),now())`,
+      [id, name, str(b.niche, 200), str(b.language, 20) || 'EN', str(b.cadence, 120), str(b.voice_tone, 200), status]);
+    await audit(env, me.user_id, 'channel.create', 'channel', id, { name });
+    return json({ id }, 201);
+  }
+  if ((k = p.match(/^\/admin\/channels\/(ch_[a-f0-9]+)$/)) && (m === 'PATCH' || m === 'DELETE')) {
+    need(me, ADMIN_ROLES);
+    const ch = await one(env, 'SELECT id FROM channels WHERE id=$1 AND deleted_at IS NULL', [k[1]]);
+    if (!ch) throw new HttpError(404, 'channel not found');
+    if (m === 'DELETE') {
+      const used = await one(env, `SELECT count(*)::int AS n FROM video_tickets WHERE channel_id=$1 AND deleted_at IS NULL`, [k[1]]);
+      if (used.n > 0) throw new HttpError(409, `channel has ${used.n} video tickets; archive it instead`);
+      await q(env, 'UPDATE channels SET deleted_at=now(), updated_at=now() WHERE id=$1', [k[1]]);
+      await audit(env, me.user_id, 'channel.delete', 'channel', k[1], {});
+      return json({ ok: true });
+    }
+    const b = await body(req);
+    const fields = { name: 120, niche: 200, language: 20, cadence: 120, voice_tone: 200 };
+    const sets = [], vals = [k[1]];
+    for (const [f, max] of Object.entries(fields)) if (f in b) { vals.push(f === 'name' ? (str(b[f], max) || '').trim() || null : str(b[f], max)); sets.push(`${f}=$${vals.length}`); }
+    if ('status' in b) { if (!CH_STATUS.has(b.status)) throw new HttpError(400, 'status'); vals.push(b.status); sets.push(`status=$${vals.length}`); }
+    if ('name' in b && !vals[sets.findIndex((x) => x.startsWith('name=')) + 1]) throw new HttpError(400, 'name required');
+    if (sets.length) await q(env, `UPDATE channels SET ${sets.join(', ')}, updated_at=now() WHERE id=$1`, vals);
+    await audit(env, me.user_id, 'channel.update', 'channel', k[1], { fields: Object.keys(b) });
+    return json({ ok: true });
+  }
+  if ((k = p.match(/^\/admin\/channels\/(ch_[a-f0-9]+)\/members$/)) && m === 'PUT') {
+    need(me, ADMIN_ROLES);
+    const b = await body(req);
+    const ids = Array.isArray(b.user_ids) ? [...new Set(b.user_ids.map(String))].slice(0, 100) : [];
+    await tx(env, [
+      { query: 'DELETE FROM channel_members WHERE channel_id=$1', params: [k[1]] },
+      ...ids.map((u) => ({ query: `INSERT INTO channel_members (channel_id, user_id) SELECT $1::varchar, id FROM users WHERE id=$2::varchar AND deleted_at IS NULL`, params: [k[1], u] })),
+    ]);
+    await audit(env, me.user_id, 'channel.members', 'channel', k[1], { count: ids.length });
+    return json({ ok: true });
+  }
+
+  // --- admin: people
+  if ((k = p.match(/^\/admin\/users\/(usr_[A-Za-z0-9_]+)$/)) && m === 'PATCH') {
+    need(me, ADMIN_ROLES);
+    const b = await body(req);
+    const name = str(b.display_name, 120)?.trim();
+    if (!name) throw new HttpError(400, 'display_name required');
+    await q(env, 'UPDATE users SET display_name=$2, updated_at=now() WHERE id=$1 AND deleted_at IS NULL', [k[1], name]);
+    await audit(env, me.user_id, 'user.update', 'user', k[1], {});
+    return json({ ok: true });
+  }
+  if ((k = p.match(/^\/admin\/users\/(usr_[A-Za-z0-9_]+)\/deactivate$/)) && m === 'POST') {
+    need(me, ADMIN_ROLES);
+    if (k[1] === me.user_id) throw new HttpError(409, 'you cannot deactivate yourself');
+    const u = await one(env, `SELECT u.id, EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=u.id AND r.code='owner') AS is_owner
+                                FROM users u WHERE u.id=$1 AND u.deleted_at IS NULL`, [k[1]]);
+    if (!u) throw new HttpError(404, 'user not found');
+    if (u.is_owner && me.role !== 'owner') throw new HttpError(403, 'only an owner can deactivate an owner');
+    await tx(env, [
+      { query: 'UPDATE access_tokens SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL', params: [k[1]] },
+      { query: 'UPDATE users SET deleted_at=now(), updated_at=now() WHERE id=$1', params: [k[1]] },
+      { query: 'DELETE FROM channel_members WHERE user_id=$1', params: [k[1]] },
+    ]);
+    await audit(env, me.user_id, 'user.deactivate', 'user', k[1], {});
+    return json({ ok: true });
+  }
+
+  // --- admin: stats (only what the factory database knows; no YouTube analytics)
+  if (p === '/admin/stats' && m === 'GET') {
+    need(me, ADMIN_ROLES);
+    const [stages, perChannel, jobs, agent, briefs, tokens, people, activity] = await Promise.all([
+      q(env, `SELECT stage, count(*)::int AS n FROM video_tickets v JOIN channels c ON c.id=v.channel_id
+               WHERE v.deleted_at IS NULL AND c.deleted_at IS NULL GROUP BY stage`),
+      q(env, `SELECT c.id, c.name, c.status, v.stage, count(v.id)::int AS n FROM channels c
+                LEFT JOIN video_tickets v ON v.channel_id=c.id AND v.deleted_at IS NULL
+               WHERE c.deleted_at IS NULL GROUP BY c.id, c.name, c.status, v.stage`),
+      q(env, `SELECT status, count(*)::int AS n FROM research_jobs GROUP BY status`),
+      one(env, `SELECT count(*)::int AS runs, count(*) FILTER (WHERE status='succeeded')::int AS succeeded,
+                       count(*) FILTER (WHERE status='failed')::int AS failed,
+                       coalesce(sum(cost_usd),0)::float AS cost_total,
+                       coalesce(sum(cost_usd) FILTER (WHERE started_at > now() - interval '7 days'),0)::float AS cost_7d,
+                       coalesce(avg(cost_usd) FILTER (WHERE status='succeeded'),0)::float AS cost_avg,
+                       coalesce(avg(tool_calls) FILTER (WHERE status='succeeded'),0)::float AS tools_avg,
+                       coalesce(avg(extract(epoch FROM finished_at - started_at)) FILTER (WHERE status='succeeded'),0)::float AS secs_avg,
+                       max(model) AS model
+                  FROM agent_runs`),
+      one(env, `SELECT (SELECT count(DISTINCT job_id) FROM research_briefs)::int AS briefs,
+                       count(*)::int AS facts, count(*) FILTER (WHERE verified)::int AS verified
+                  FROM research_facts f JOIN research_briefs b ON b.id=f.brief_id
+                 WHERE b.version = (SELECT max(version) FROM research_briefs b2 WHERE b2.job_id=b.job_id)`),
+      q(env, `SELECT r.code AS role, count(*)::int AS n FROM access_tokens t JOIN roles r ON r.id=t.role_id JOIN users u ON u.id=t.user_id
+               WHERE t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > now()) AND u.deleted_at IS NULL GROUP BY r.code`),
+      one(env, `SELECT count(*) FILTER (WHERE kind='human')::int AS humans, count(*) FILTER (WHERE kind='agent')::int AS agents FROM users WHERE deleted_at IS NULL`),
+      q(env, `SELECT a.created_at, a.action, a.entity_type, a.entity_id, u.display_name AS actor
+                FROM audit_events a LEFT JOIN users u ON u.id=a.actor_user_id ORDER BY a.created_at DESC LIMIT 25`),
+    ]);
+    return json({ stages, per_channel: perChannel, jobs, agent, briefs, tokens, people, activity, generated_at: new Date().toISOString() });
   }
 
   if (p === '/admin/webhook' && m === 'GET') {

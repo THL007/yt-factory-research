@@ -24,8 +24,6 @@ export type Run = { id: string; model: string; status: string; input_tokens: num
 export type JobDetail = { job: Job; brief: Brief | null; facts: Fact[]; references: Reference[]; runs: Run[] };
 export type Channel = { id: string; name: string; niche: string | null; language: string | null; status: string };
 export type Me = { user: { id: string; username: string; display_name: string; kind: string }; role: Role; token_label: string };
-export type AdminUser = { id: string; username: string; display_name: string; kind: string; roles: string[] };
-export type Token = { id: string; label: string; token_prefix: string; created_at: string; last_used_at: string | null; expires_at: string | null; revoked_at: string | null; user_id: string; display_name: string; username: string; role: string };
 
 const KEY = "ytf-research";
 export function getSettings(): { api: string; token: string } {
@@ -62,11 +60,6 @@ export const api = {
     post<JobDetail>("/research/jobs", b),
   saveBrief: (id: string, b: unknown) => call<JobDetail & { version: number }>(`/research/jobs/${id}/brief`, { method: "PUT", body: JSON.stringify(b) }),
   action: (id: string, act: "claim" | "agent" | "cancel" | "handoff") => post<JobDetail | { ok: boolean }>(`/research/jobs/${id}/${act}`),
-  users: () => call<{ users: AdminUser[]; roles: { id: string; code: string; label: string }[] }>("/admin/users"),
-  createUser: (b: { username: string; display_name: string }) => post<{ id: string }>("/admin/users", b),
-  tokens: () => call<Token[]>("/admin/tokens"),
-  mintToken: (b: { user_id: string; role: string; label: string; expires_days?: number }) => post<{ id: string; token: string }>("/admin/tokens", b),
-  revokeToken: (id: string) => post<{ ok: boolean }>(`/admin/tokens/${id}/revoke`),
   webhook: () => call<{ url: string | null; secret_set: boolean }>("/admin/webhook"),
   setWebhookSecret: (secret: string) => call<{ ok: boolean }>("/admin/webhook", { method: "PUT", body: JSON.stringify({ secret }) }),
   testWebhook: () => post<{ ok: boolean; note: string }>("/admin/webhook/test"),
