@@ -8,6 +8,7 @@ Stage 1 (Idea → Script) of the faceless YouTube factory: a PWA for the Researc
 | API (Cloudflare Worker, Neon over HTTP, R2) | `api/` | https://yt-factory-api.thl007.workers.dev |
 | Research agent (pi + OpenRouter) | `agent/` | this server, woken by the OpenBot routine "YT Factory: research pipeline" |
 | Migrations, token minting | `db/` | Neon project `yt-factory-cm-1` |
+| Owner/admin dashboard (channels, people, tokens, stats) | separate repo [THL007/yt-factory-dashboard](https://github.com/THL007/yt-factory-dashboard) | https://thl007.github.io/yt-factory-dashboard/ |
 
 Ops docs and the data model: Obsidian `yt-factory/pipeline/research-desk.md`.
 
@@ -36,7 +37,7 @@ sequenceDiagram
 
 ## Access tokens
 
-`ytf_` + 48 hex characters. One token = one user + one role (`access_tokens`), stored only as a sha256 hash. Owners and admins mint and revoke them in the app (Tokens). Bootstrap/recovery from the server: `DATABASE_URL=… node db/mint-token.mjs <username> <role> [label] > file`.
+`ytf_` + 48 hex characters. One token = one user + one role (`access_tokens`), stored only as a sha256 hash. Owners and admins mint and revoke them in the Factory dashboard; the Research desk only has a token input and (owner) the agent wake-up secret. Bootstrap/recovery from the server: `DATABASE_URL=… node db/mint-token.mjs <username> <role> [label] > file`.
 
 | Role | Can |
 |---|---|
@@ -63,4 +64,4 @@ cd api && npx wrangler dev               # needs api/.dev.vars with DATABASE_URL
 cd agent && npm ci && python3 -m venv .venv && .venv/bin/pip install yt-dlp
 ```
 
-Deploy the PWA: `cd app && npm run deploy` (gh-pages). The Worker was deployed through the Cloudflare API (bindings: `BUCKET` → R2 `yt-factory`; vars `ALLOWED_ORIGINS`, `WEBHOOK_URL`, `BOOTSTRAP_HASH`); its Neon URL and webhook secret live in R2 `config/secrets.json`.
+Deploy the PWA: `cd app && npm run deploy` (gh-pages). Deploy the API: `api/deploy.sh` stages the bundle in R2 through the `yt-factory-stage` worker (nonce in `~/.config/ytf/stage.nonce`), then the Cloudflare API publishes `deploy/yt-factory-api.js` as `yt-factory-api`. The Worker was first deployed through the Cloudflare API (bindings: `BUCKET` → R2 `yt-factory`; vars `ALLOWED_ORIGINS`, `WEBHOOK_URL`, `BOOTSTRAP_HASH`); its Neon URL and webhook secret live in R2 `config/secrets.json`.
