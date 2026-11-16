@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Research desk",
+    "slug": "yt-factory-research",
+    "version": "1.0.0",
+    "scheme": "ytfresearch",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "web": {
+      "output": "single",
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png",
+      "name": "Research desk",
+      "shortName": "Research",
+      "themeColor": "#c6ced6",
+      "backgroundColor": "#c6ced6"
+    },
+    "experiments": { "baseUrl": "/yt-factory-research", "typedRoutes": false },
+    "plugins": ["expo-router"]
+  }
+}

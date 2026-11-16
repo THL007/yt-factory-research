@@ -1,0 +1,13 @@
+name = "yt-factory-api"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGINS = "https://thl007.github.io"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "yt-factory"
+
+# Secrets (wrangler secret put): DATABASE_URL (Neon pooled URL), WEBHOOK_URL (OpenBot webhook routine)

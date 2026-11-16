@@ -1,0 +1,17 @@
+{
+  "name": "ytf-research-agent",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "run": "node run.mjs",
+    "mirror": "node mirror.mjs"
+  },
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^1.5.2",
+    "@neondatabase/serverless": "^1.2.1"
+  },
+  "private": true
+}

@@ -1,0 +1,10 @@
+node_modules/
+.venv/
+.env
+.env.*
+.dev.vars
+.wrangler/
+.pi/
+dist/
+.expo/
+*.token
