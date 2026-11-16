@@ -2,6 +2,31 @@
  {
   "scope": "app",
   "shape": "app screen",
+  "theme": "almanac",
+  "axes": "mid/grotesk-sans/chromatic-magenta",
+  "hero": "none",
+  "nav": "top bar, wordmark, three tabs, role and sign-out",
+  "footer": "none",
+  "imagery": "product: YouTube thumbnails of reference videos from R2",
+  "photos": [],
+  "entry": "none",
+  "fingerprint": "research-desk-faceless-youtube-6355",
+  "sections": [
+   "queue table on the sheet",
+   "brief dossier: angle, viral breakdown, facts ledger, reference videos, titles, assets and rights, agent runs",
+   "brief editor",
+   "new job form",
+   "tokens admin + agent wake-up"
+  ],
+  "signature": "the facts ledger with source column and magenta UNVERIFIED",
+  "waived": [],
+  "prompt": "Research desk PWA for the YT factory Research role",
+  "date": "2026-11-16",
+  "mode": "build"
+ },
+ {
+  "scope": "app",
+  "shape": "app screen",
   "theme": "darkroom",
   "axes": "dark/display-condensed/chromatic-amber",
   "hero": "none",
